@@ -70,20 +70,26 @@
       position: fixed;
       width: 50px;
       height: 50px;
-      background: rgba(0, 0, 255, 0.342);
+      background: transparent;
       border-radius: 50%;
-      border: medium solid rgba(0, 0, 255, 0.171);
+      border: 2px solid black;
       z-index: 1000;
+      pointer-events: none;
+      transition: border-color 0.3s ease;
+    }
+
+    #cursor.invisible {
+      border-color: transparent;
     }
 
     #calib_cursor {
       position: fixed;
       width: 50px;
       height: 50px;
-      background: rgba(40, 126, 6, 0.291);
+      background: black;
       border-radius: 50%;
-      border: medium solid rgba(60, 252, 2, 0.236);
       z-index: 1000;
+      pointer-events: none;
     }
 
     @media (max-width: 576px) {
@@ -95,73 +101,433 @@
     .highlight {
       box-shadow: 0 0 15px rgba(255, 98, 0, 0.8);
     }
+
+    .text-container {
+        height: 800px;
+        overflow-y: auto;
+        padding: 20px 40px;
+        background-color: #fff;
+        border: 1px solid #ccc;
+        border-radius: 8px;
+        line-height: 1.6;
+        font-size: 1.1em;
+    }
+
+    .paragraph-chunk {
+        margin-bottom: 30px;
+        padding: 20px;
+        background-color: #f8f9fa;
+        border-radius: 5px;
+        transition: all 0.3s ease;
+        max-width: 800px;
+        margin-left: auto;
+        margin-right: auto;
+        position: relative;
+    }
+
+    .paragraph-chunk:hover {
+        background-color: #e9ecef;
+    }
+
+    .paragraph-chunk.highlight {
+        box-shadow: 0 0 15px rgba(255, 98, 0, 0.8);
+        background-color: #fff3e6;
+    }
+
+    .text-container::-webkit-scrollbar {
+        width: 12px;
+    }
+
+    .text-container::-webkit-scrollbar-track {
+        background: #f1f1f1;
+        border-radius: 6px;
+    }
+
+    .text-container::-webkit-scrollbar-thumb {
+        background: #888;
+        border-radius: 6px;
+    }
+
+    .text-container::-webkit-scrollbar-thumb:hover {
+        background: #555;
+    }
+
+    .page-title {
+        text-align: center;
+        padding: 15px 0;
+        margin-bottom: 15px;
+        font-size: 1.8em;
+        font-weight: bold;
+        color: #333;
+        border-bottom: 2px solid #eee;
+    }
+
+    .time-counter {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        background-color: rgba(0, 0, 0, 0.1);
+        padding: 5px 10px;
+        border-radius: 15px;
+        font-size: 0.9em;
+        color: #666;
+    }
+
+    .control-panel {
+        position: fixed;
+        bottom: 15px;
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 1001;
+        background-color: rgba(255, 255, 255, 0.9);
+        padding: 8px 15px;
+        border-radius: 15px;
+        box-shadow: 0 1px 5px rgba(0, 0, 0, 0.1);
+        display: flex;
+        gap: 10px;
+    }
+
+    .control-button {
+        padding: 5px 12px;
+        border: none;
+        border-radius: 12px;
+        cursor: pointer;
+        font-size: 0.9em;
+        background-color: #333;
+        color: white;
+        transition: all 0.3s ease;
+    }
+
+    .control-button:hover {
+        background-color: #666;
+    }
+
+    .control-button:disabled {
+        background-color: #999;
+        cursor: not-allowed;
+    }
+
+    .toggle-switch {
+        position: relative;
+        display: inline-block;
+        width: 50px;
+        height: 24px;
+    }
+
+    .toggle-switch input {
+        opacity: 0;
+        width: 0;
+        height: 0;
+    }
+
+    .toggle-slider {
+        position: absolute;
+        cursor: pointer;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background-color: #333;
+        transition: .4s;
+        border-radius: 24px;
+    }
+
+    .toggle-slider:before {
+        position: absolute;
+        content: "";
+        height: 16px;
+        width: 16px;
+        left: 4px;
+        bottom: 4px;
+        background-color: white;
+        transition: .4s;
+        border-radius: 50%;
+    }
+
+    .toggle-switch input:checked + .toggle-slider {
+        background-color: #666;
+    }
+
+    .toggle-switch input:checked + .toggle-slider:before {
+        transform: translateX(26px);
+    }
+
+    .toggle-label {
+        font-size: 0.9em;
+        color: #333;
+        margin-left: 8px;
+    }
+
+    .calibration-mode .paragraph-chunk {
+        opacity: 0;
+        pointer-events: none;
+    }
+
+    .calibration-mode #calib_cursor {
+        display: block;
+    }
+
+    .reading-mode #calib_cursor {
+        display: none;
+    }
+
+    .calibration-message {
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        text-align: center;
+        color: #333;
+        font-size: 1.2em;
+        z-index: 999;
+        background-color: rgba(255, 255, 255, 0.9);
+        padding: 20px;
+        border-radius: 10px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        transition: opacity 0.5s ease;
+    }
+
+    .calibration-mode .text-container {
+        opacity: 0;
+        pointer-events: none;
+    }
+
+    .calibration-mode .calibration-message {
+        opacity: 1;
+    }
+
+    .reading-mode .calibration-message {
+        opacity: 0;
+        pointer-events: none;
+    }
   </style>
 </head>
 <body style="height: 100vh;">
-  <header>
-    <div class="logo">
-      <img src="static/demo_pic/icon.png" alt="EyeGestures Icon">
-      <h1>EyeTube</h1>
+    <div class="page-title">
+        Inquiry into Eye-Gesture Powered Reading Experience
     </div>
-    <div class="search-bar">
-      <input type="text" placeholder="Search">
+    
+    <div class="container-fluid" style="margin-top: 20px; margin-bottom: 40px;">
+        <div class="row main-content">
+            <div class="col-6">
+                <div class="text-container" id="leftTextContainer">
+                    <!-- Left paragraphs will be inserted here -->
+                </div>
+            </div>
+            <div class="col-6">
+                <div class="text-container" id="rightTextContainer">
+                    <!-- Right paragraphs will be inserted here -->
+                </div>
+            </div>
+        </div>
     </div>
-  </header>
 
-  <div class="container-fluid" style="margin-top: 20px;">
-    <div class="row main-content">
-      <div class="col-lg-8 col-md-7 col-12 main-video">
-        <div class="video-thumbnail" style="background-image: url('static/demo_pic/background_magnet_demo.png');"></div>
-        <div class="video-title">Main Video</div>
-      </div>
-      <div class="col-lg-4 col-md-5 col-12 sidebar-videos">
-        <div class="video-item">
-          <div class="video-thumbnail" style="background-image: url('/static/demo_pic/rune1.png');"></div>
-          <div class="video-title">Sidebar Video Title 1</div>
+    <div class="control-panel">
+        <button id="startButton" class="control-button">Start to Read</button>
+        
+        <div style="display: flex; align-items: center;">
+            <label class="toggle-switch">
+                <input type="checkbox" id="cursorToggle" checked>
+                <span class="toggle-slider"></span>
+            </label>
+            <span class="toggle-label">Cursor</span>
         </div>
-        <div class="video-item">
-          <div class="video-thumbnail" style="background-image: url('/static/demo_pic/rune2.png');"></div>
-          <div class="video-title">Sidebar Video Title 2</div>
-        </div>
-        <div class="video-item">
-          <div class="video-thumbnail" style="background-image: url('/static/demo_pic/rune3.png');"></div>
-          <div class="video-title">Sidebar Video Title 3</div>
-        </div>
-      </div>
-    </div>
-  </div>
-<!-- 
-  <div id="cursor"></div>
-  <div id="calib_cursor"></div> -->
 
-  <script src="https://code.jquery.com/jquery-3.5.1.slim.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.5.4/dist/umd/popper.min.js"></script>
-  <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.0/socket.io.js"></script>
-  <script src="/eyeCanvas.js"></script>
-  <script>
-    function checkOverlap(cursor, elements) {
-      const cursorRect = cursor.getBoundingClientRect();
-      elements.forEach(element => {
-        const elementRect = element.getBoundingClientRect();
-        if ((cursorRect.right > elementRect.left && cursorRect.right < elementRect.right &&
-             cursorRect.top < elementRect.bottom && cursorRect.top > elementRect.top
-              )) {
-          element.classList.add('highlight');
-        } else {
-          element.classList.remove('highlight');
+        <div style="display: flex; align-items: center;">
+            <label class="toggle-switch">
+                <input type="checkbox" id="timerToggle" checked>
+                <span class="toggle-slider"></span>
+            </label>
+            <span class="toggle-label">Timer</span>
+        </div>
+    </div>
+
+    <div class="calibration-message">
+        Please follow the black target circle with your eyes<br>
+        to complete the calibration process
+    </div>
+
+    <script src="https://code.jquery.com/jquery-3.5.1.slim.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.5.4/dist/umd/popper.min.js"></script>
+    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.0/socket.io.js"></script>
+    <script src="/eyeCanvas.js"></script>
+    <script>
+        class Paragraph {
+            constructor(text, id) {
+                this.text = text;
+                this.id = id;
+                this.element = this.createElement();
+                this.timeSpent = 0;
+                this.isHighlighted = false;
+                this.lastUpdateTime = null;
+            }
+
+            createElement() {
+                const div = document.createElement('div');
+                div.className = 'paragraph-chunk';
+                div.id = `paragraph-${this.id}`;
+                
+                const textDiv = document.createElement('div');
+                textDiv.textContent = this.text;
+                
+                const counterDiv = document.createElement('div');
+                counterDiv.className = 'time-counter';
+                counterDiv.textContent = '0.0s';
+                
+                div.appendChild(textDiv);
+                div.appendChild(counterDiv);
+                
+                return div;
+            }
+
+            updateCounter() {
+                const now = Date.now();
+                if (this.isHighlighted && this.lastUpdateTime) {
+                    this.timeSpent += now - this.lastUpdateTime;
+                }
+                this.lastUpdateTime = now;
+                
+                const seconds = (this.timeSpent / 1000).toFixed(1);
+                const counterDiv = this.element.querySelector('.time-counter');
+                counterDiv.textContent = `${seconds}s`;
+            }
+
+            setHighlight(isHighlighted, isRecording) {
+                if (!isRecording) {
+                    isHighlighted = false;
+                }
+                
+                this.isHighlighted = isHighlighted;
+                if (isHighlighted) {
+                    this.element.classList.add('highlight');
+                    if (!this.lastUpdateTime) {
+                        this.lastUpdateTime = Date.now();
+                    }
+                } else {
+                    this.element.classList.remove('highlight');
+                    if (this.lastUpdateTime) {
+                        this.updateCounter();
+                        this.lastUpdateTime = null;
+                    }
+                }
+            }
+
+            appendTo(container) {
+                container.appendChild(this.element);
+            }
+
+            hideCounter(hide) {
+                const counterDiv = this.element.querySelector('.time-counter');
+                if (hide) {
+                    counterDiv.classList.add('hidden');
+                } else {
+                    counterDiv.classList.remove('hidden');
+                }
+            }
+
+            resetCounter() {
+                this.timeSpent = 0;
+                this.lastUpdateTime = null;
+                this.isHighlighted = false;
+                const counterDiv = this.element.querySelector('.time-counter');
+                counterDiv.textContent = '0.0s';
+            }
         }
-      });
-    }
 
-    document.addEventListener('DOMContentLoaded', () => {
-      const cursor = document.getElementById('cursor');
-      const elementsToCheck = document.querySelectorAll('.video-thumbnail, .video-title');
+        function checkOverlap(cursor, paragraphs, isRecording) {
+            const cursorRect = cursor.getBoundingClientRect();
+            paragraphs.forEach(paragraph => {
+                const elementRect = paragraph.element.getBoundingClientRect();
+                const isOverlapping = (cursorRect.right > elementRect.left && 
+                                     cursorRect.right < elementRect.right &&
+                                     cursorRect.top < elementRect.bottom && 
+                                     cursorRect.top > elementRect.top);
+                paragraph.setHighlight(isOverlapping, isRecording);
+            });
+        }
 
-      setInterval(() => {
-        checkOverlap(cursor, elementsToCheck);
-      }, 100);
-    });
-  </script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const leftText = `I have always loved objects of measurement and display such as our  family barometer, both real and imagined. Do you remember Frodo's  sword Sting in The Hobbit? It's one of those fantastic objects. Not  only is it perfectly made for its task-well-balanced, attractive, and  sharp-it has an additional and amazing ability: it detects the presence  of goblins and evil orcs. When danger approaches, Sting glows blue,  anticipating its own need and use. It is a trusty weapon, an infallible warning system, a handsome object, and a fantastic companion-for  a hobbit.
+
+            Sting, the barometer, and so many other steampunk-era objectsvintage car and boat dashboards, analog dials, and stereo interfaceshave material qualities that I respond to. Not only are they delightful to  operate and live with, they have a knowingness about them, a possession of knowledge that they convey, an ability to amplify human abilities. Like a vintage clock, such instruments seem to carry the weight  of experience.
+
+            Even as a kid, I imagined creating objects that were as handy as  Sting and as mystical as the barometer. In those hours I spent in the  workshop with my grandfather (avoiding the Thanksgiving or Christmas hubbub taking place upstairs), we would turn bowls on the lathe,  take apart clocks, build stereo speakers and bike rollers, dream up  and draw fantasy homes or airports. My curiosity carried through my  childhood: at robot camp one summer, we programmed a poodle-size  robot using a complicated series of codes called assembly language,  and, in high school, I learned to program on my first Apple He, making it spin out of control with a recursive algorithm.
+
+            In college, computing opened my eyes to a new world of possibilities for what objects could already do and what they might eventually be able to do. A double major, I found that both physics and fine art  had their own thrilling languages for characterizing the physical world,  each with revelations and enlightenments. My graduate work at Harvard included the building of software-learning simulations like SimCity. Then I came to MIT's Media Lab, a place where programmers  mix with artists, musicians, and educators, and everyone experiments  with technology and computation, seeking to reinvent everything from  cinema to opera to medicine and education. There, I had another revelation: technology could enhance objects in ways that would come  close to, or even surpass, the qualities of the magical objects from folklore and science fiction that I have loved since I was a kid. To make  ordinary things as extraordinary and delightful to use and as pleasing  to live with as my father's barometer and my grandfather's tools, the  human-computer interaction needs to be freed from clicking and dragging. There can (and will) be real flying carpets and should be (and already are) Dick Tracy wrist communicators.`;
+
+            const rightText = `The most pressing question underlying these competing trajectories is this: What is the most natural and desirable-even invisible-way  for human beings to interact with technology without requiring a new  set of skills or constantly needing to learn new languages, gestures, icons, color codes, or button combinations? This question has fascinated me for years, driven me to start up five technology companies,  and pushed me to pursue academic research and teaching at the Media Lab.
+
+            I believe these trajectories-Terminal World, prosthetics/wearables, animism, and enchanted objects-are fluid and transitional. They will all bring some degree of value and will overlap and inform each other.  I have chosen to devote my time and energy to the fourth technology trajectory: enchanted objects. I won't abandon my smartphones or lose interest in the work of my colleagues who are developing wearabies and social robots. I simply believe that the most promising and pleasing future is one where technology infuses ordinary things with a  bit of magic to create a more satisfying interaction and evoke an emotional response.
+
+            Think of this approach to technology as a realization of our fondest fantasies and wildest dreams. A reimagining of flying carpets, talking  mirrors, protective cloaks, animated brooms, and omniscient crystal  balls-as well as cherished everyday objects of our past lives, such as hallway barometers and woodworking tools-things we have always loved, dreamed about, and wanted in our lives. This book is about that reimagining and how to make it a reality. ENCHANTED OBJECTS  humans and machines will be preserved. I disagree. I understand that  category confusion provokes anxiety, that people become disturbed when they're not quite sure if they're talking to a machine or a person.
+
+            But I also believe that natural human-computer interaction has more  benefits than risks. When I was in high school, the standard breakup line was "Let's just  be friends ." The snide retort was "If I wanted another friend, I would have gotten a dog." Given Facebook's and Linkedin's abilities to connect me with hundreds of loose ties (aka "friends"), I don't feel the need for a new set of artificial friends in my life, especially in the form  of awkward, sometimes dim-witted, and often brittle robots.`;
+
+            let paragraphs = [];
+            let isReadingMode = false;
+            document.body.classList.add('calibration-mode');
+
+            // Update control button handlers
+            const startButton = document.getElementById('startButton');
+            const cursorToggle = document.getElementById('cursorToggle');
+            const timerToggle = document.getElementById('timerToggle');
+            const cursor = document.getElementById('cursor');
+
+            startButton.addEventListener('click', () => {
+                if (!isReadingMode) {
+                    isReadingMode = true;
+                    document.body.classList.remove('calibration-mode');
+                    document.body.classList.add('reading-mode');
+                    startButton.disabled = true;
+                    startButton.textContent = 'Reading Mode';
+                    
+                    // Show paragraphs with transition
+                    paragraphs.forEach(paragraph => {
+                        paragraph.element.style.transition = 'opacity 0.5s ease';
+                        paragraph.element.style.opacity = '1';
+                        paragraph.element.style.pointerEvents = 'auto';
+                    });
+                }
+            });
+
+            cursorToggle.addEventListener('change', () => {
+                cursor.classList.toggle('invisible', !cursorToggle.checked);
+            });
+
+            timerToggle.addEventListener('change', () => {
+                paragraphs.forEach(paragraph => {
+                    paragraph.hideCounter(!timerToggle.checked);
+                });
+            });
+
+            function populateContainer(containerId, text) {
+                const paragraphTexts = text.split('\n\n').map(p => p.trim()).filter(p => p.length > 0);
+                const container = document.getElementById(containerId);
+                
+                paragraphTexts.forEach((text, index) => {
+                    const paragraph = new Paragraph(text, `${containerId}-${index}`);
+                    paragraph.appendTo(container);
+                    paragraphs.push(paragraph);
+                });
+            }
+
+            // Populate both containers
+            populateContainer('leftTextContainer', leftText);
+            populateContainer('rightTextContainer', rightText);
+
+            // Update the interval to only work in reading mode
+            setInterval(() => {
+                if (isReadingMode) {
+                    checkOverlap(cursor, paragraphs, true);
+                    paragraphs.forEach(paragraph => {
+                        if (paragraph.isHighlighted) {
+                            paragraph.updateCounter();
+                        }
+                    });
+                }
+            }, 100);
+        });
+    </script>
 </body>
 </html>

@@ -1,7 +1,7 @@
 # flask_app.py
 from flask import Flask, render_template, request
 from flask_socketio import SocketIO, emit
-from eyeGestures.eyegestures import EyeGestures_v2
+from eyeGestures import EyeGestures_v2
 from threading import Thread 
 import numpy as np
 import base64
@@ -20,7 +20,7 @@ def index():
 
 
 @flask_app.route('/eyeCanvas.js')
-def eyecanvas():
+def eyecanvas(): 
     # unique_id = tasks.generater_ID()
     return render_template(
         'sdk/eyeCanvas.js',
