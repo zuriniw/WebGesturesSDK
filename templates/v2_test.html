@@ -130,8 +130,8 @@
     }
 
     .paragraph-chunk.highlight {
-        box-shadow: 0 0 15px rgba(255, 98, 0, 0.8);
-        background-color: #fff3e6;
+        border: 2px solid black;
+        background-color: transparent;
     }
 
     body::-webkit-scrollbar {
@@ -156,10 +156,11 @@
         text-align: center;
         padding: 15px 0;
         margin-bottom: 15px;
-        font-size: 1.8em;
+        font-size: 1.4em;
         font-weight: bold;
         color: #333;
         border-bottom: 2px solid #eee;
+        font-family: monospace;
     }
 
     .time-counter {
@@ -171,7 +172,7 @@
         border-radius: 15px;
         font-size: 0.9em;
         color: #666;
-        z-index: 999;
+        z-index: 1;
         display: block !important;
     }
 
@@ -411,7 +412,7 @@
     <canvas id="heatmapCanvas" class="heatmap-canvas"></canvas>
     <canvas id="pointsCanvas" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 999;"></canvas>
     <div class="page-title">
-        Inquiry into Eye-Gesture Powered Reading Experience
+        Knitting Text: Inquiry into Reading Entanglement
     </div>
     
     <div class="container-fluid main-content-wrapper">
@@ -505,6 +506,8 @@
                 this.isOutOfScreen = false;
                 this.point = null;
                 this.pointElement = this.createPointElement();
+                this.rippleRadius = 0; // Initialize ripple radius
+                this.rippleInterval = null; // Store interval for ripples
             }
 
             createPointElement() {
@@ -513,13 +516,50 @@
                     position: absolute;
                     width: 8px;
                     height: 8px;
-                    background-color: black;
+                    background-color: rgb(131, 0, 0);
                     border-radius: 50%;
                     display: none;
                     z-index: 1000;
                     transition: all 0.3s ease;
                 `;
                 return point;
+            }
+
+            startRippleEffect() {
+                this.rippleRadius = 0; // Reset ripple radius
+                this.rippleInterval = setInterval(() => {
+                    this.rippleRadius += 8; // Increase radius by 8px each time (was 4px)
+                    this.drawRipple();
+                }, 200); // Every 0.2 seconds (was 0.1 seconds) - creates bigger gaps between circles
+            }
+
+            stopRippleEffect() {
+                clearInterval(this.rippleInterval);
+                this.rippleRadius = 0; // Reset ripple radius
+            }
+
+            drawRipple() {
+                const pointRect = this.pointElement.getBoundingClientRect();
+                const centerX = pointRect.left + pointRect.width / 2;
+                const centerY = pointRect.top + pointRect.height / 2;
+
+                const rippleCanvas = document.createElement('canvas');
+                rippleCanvas.width = window.innerWidth;
+                rippleCanvas.height = window.innerHeight;
+                const rippleCtx = rippleCanvas.getContext('2d');
+
+                rippleCtx.clearRect(0, 0, rippleCanvas.width, rippleCanvas.height);
+                rippleCtx.beginPath();
+                rippleCtx.arc(centerX, centerY, this.rippleRadius, 0, Math.PI * 2);
+                rippleCtx.strokeStyle = 'rgba(246, 141, 141, 0.3)';
+                rippleCtx.lineWidth = 3;
+                rippleCtx.stroke();
+
+                document.body.appendChild(rippleCanvas);
+
+                setTimeout(() => {
+                    document.body.removeChild(rippleCanvas);
+                }, 1500); // Keep circles visible longer (was 1000)
             }
 
             initializeRandomPoint() {
@@ -579,11 +619,11 @@
                     const scale = 1 + (this.timeSpent / 1000) * 0.5;
                     this.pointElement.style.transform = `scale(${scale})`;
 
-                    // Only update background if not highlighted
-                    if (!this.isHighlighted) {
-                        const darkness = Math.min(0.5, this.timeSpent / 10000);
-                        this.element.style.backgroundColor = `rgba(0, 0, 0, ${darkness})`;
-                        this.element.style.color = darkness > 0.3 ? 'white' : 'black';
+                    // Start ripple effect when highlighted
+                    if (this.isHighlighted && this.rippleRadius === 0) {
+                        this.startRippleEffect();
+                    } else if (!this.isHighlighted) {
+                        this.stopRippleEffect();
                     }
                 }
             }
@@ -591,22 +631,19 @@
             setHighlight(isHighlighted, isRecording, isOutOfScreen) {
                 this.isHighlighted = isHighlighted;
                 
-                if (document.body.classList.contains('playback-mode')) {
+                if (document.body.classList.contains('knitting-mode')) {
                     this.pointElement.style.display = 'block';
                     if (isHighlighted) {
-                        // Only set background color, no shadow in playback mode
-                        this.element.style.backgroundColor = '#fff3e6';
+                        this.element.style.backgroundColor = 'transparent';
+                        this.element.style.border = '2px solid black';
                         this.element.style.color = 'black';
-                        this.element.style.boxShadow = 'none';  // Explicitly remove any shadow
                     } else {
-                        // Non-highlighted paragraphs get grey based on time spent
                         const darkness = Math.min(0.5, this.timeSpent / 10000);
                         this.element.style.backgroundColor = `rgba(0, 0, 0, ${darkness})`;
                         this.element.style.color = darkness > 0.3 ? 'white' : 'black';
-                        this.element.style.boxShadow = 'none';
+                        this.element.style.border = 'none';
                     }
                 } else {
-                    // Only use highlight class in reading mode
                     this.element.classList.toggle('highlight', isHighlighted);
                 }
             }
@@ -957,7 +994,7 @@
                     this.redrawAllLines();
                 });
 
-                this.linesCtx.strokeStyle = 'rgba(255, 98, 0, 0.5)';
+                this.linesCtx.strokeStyle = 'rgba(246, 141, 141, 0.3)';
                 this.linesCtx.lineWidth = 2;
             }
 
@@ -1246,7 +1283,7 @@
                     recorder.stopRecording();
                     isReadingMode = false;
                     document.body.classList.remove('reading-mode');
-                    document.body.classList.add('playback-mode');
+                    document.body.classList.add('knitting-mode');
 
                     disableEyeTracking();
 
