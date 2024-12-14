@@ -103,8 +103,6 @@
     }
 
     .text-container {
-        height: 800px;
-        overflow-y: auto;
         padding: 20px 40px;
         background-color: #fff;
         border: 1px solid #ccc;
@@ -124,6 +122,7 @@
         margin-left: auto;
         margin-right: auto;
         position: relative;
+        z-index: 1;
     }
 
     .paragraph-chunk:hover {
@@ -135,21 +134,21 @@
         background-color: #fff3e6;
     }
 
-    .text-container::-webkit-scrollbar {
+    body::-webkit-scrollbar {
         width: 12px;
     }
 
-    .text-container::-webkit-scrollbar-track {
+    body::-webkit-scrollbar-track {
         background: #f1f1f1;
         border-radius: 6px;
     }
 
-    .text-container::-webkit-scrollbar-thumb {
+    body::-webkit-scrollbar-thumb {
         background: #888;
         border-radius: 6px;
     }
 
-    .text-container::-webkit-scrollbar-thumb:hover {
+    body::-webkit-scrollbar-thumb:hover {
         background: #555;
     }
 
@@ -172,6 +171,8 @@
         border-radius: 15px;
         font-size: 0.9em;
         color: #666;
+        z-index: 999;
+        display: block !important;
     }
 
     .control-panel {
@@ -321,16 +322,103 @@
     .text-container-wrapper {
         position: relative;
     }
+
+    .playback-controls {
+        position: fixed;
+        bottom: 15px;
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 1001;
+        background-color: rgba(255, 255, 255, 0.9);
+        padding: 8px 15px;
+        border-radius: 15px;
+        box-shadow: 0 1px 5px rgba(0, 0, 0, 0.1);
+        display: none;
+    }
+
+    .playback-mode .playback-controls {
+        display: flex;
+        gap: 10px;
+    }
+
+    .playback-mode .control-panel {
+        display: none;
+    }
+
+    .playback-button {
+        padding: 5px 12px;
+        border: none;
+        border-radius: 12px;
+        cursor: pointer;
+        font-size: 0.9em;
+        background-color: #333;
+        color: white;
+        transition: all 0.3s ease;
+    }
+
+    .playback-button:hover {
+        background-color: #666;
+    }
+
+    .playback-mode .time-counter {
+        display: none;
+    }
+
+    .playback-mode #calib_cursor {
+        display: none;
+    }
+
+    .playback-mode .calibration-message {
+        display: none;
+    }
+
+    .main-content-wrapper {
+        padding: 20px 0;
+        margin-bottom: 60px;
+    }
+
+    .playback-mode .paragraph-chunk:hover {
+        background-color: #f8f9fa;
+        cursor: default;
+    }
+
+    #linesContainer {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        pointer-events: none;
+        z-index: 1001;
+    }
+
+    #linesCanvas {
+        width: 100%;
+        position: absolute;
+        top: 0;
+        left: 0;
+    }
+
+    .paragraph-chunk {
+        z-index: 1;
+    }
+
+    .time-counter {
+        z-index: 999;
+    }
   </style>
 </head>
-<body style="height: 100vh;">
+<body style="height: 100vh; overflow-y: auto;">
     <canvas id="heatmapCanvas" class="heatmap-canvas"></canvas>
+    <canvas id="pointsCanvas" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 999;"></canvas>
     <div class="page-title">
         Inquiry into Eye-Gesture Powered Reading Experience
     </div>
     
-    <div class="container-fluid" style="margin-top: 20px; margin-bottom: 40px;">
+    <div class="container-fluid main-content-wrapper">
         <div class="row main-content">
+            <div id="linesContainer" style="position: absolute; top: 0; left: 0; width: 100%; pointer-events: none;">
+                <canvas id="linesCanvas" style="width: 100%;"></canvas>
+            </div>
             <div class="col-6">
                 <div class="text-container" id="leftTextContainer">
                     <canvas id="leftHeatmapCanvas" class="heatmap-canvas"></canvas>
@@ -372,6 +460,13 @@
             </label>
             <span class="toggle-label">Heatmap</span>
         </div>
+
+        <button id="finishButton" class="control-button" disabled>Finish Reading</button>
+    </div>
+
+    <div class="playback-controls">
+        <button id="playPauseButton" class="playback-button">Pause</button>
+        <button id="resetButton" class="playback-button">Reset</button>
     </div>
 
     <div class="calibration-message">
@@ -385,6 +480,20 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.0/socket.io.js"></script>
     <script src="/eyeCanvas.js"></script>
     <script>
+        function disableEyeTracking() {
+            if (window.eyeGestures) {
+                window.eyeGestures.disconnect();
+                if (window.eyeGestures.socket) {
+                    window.eyeGestures.socket.removeAllListeners();
+                    window.eyeGestures.socket.disconnect();
+                }
+            }
+            if (window.eyeTrackingInterval) {
+                clearInterval(window.eyeTrackingInterval);
+            }
+            document.removeEventListener('visibilitychange', window.visibilityChangeHandler);
+        }
+
         class Paragraph {
             constructor(text, id) {
                 this.text = text;
@@ -394,6 +503,44 @@
                 this.isHighlighted = false;
                 this.lastUpdateTime = null;
                 this.isOutOfScreen = false;
+                this.point = null;
+                this.pointElement = this.createPointElement();
+            }
+
+            createPointElement() {
+                const point = document.createElement('div');
+                point.style.cssText = `
+                    position: absolute;
+                    width: 8px;
+                    height: 8px;
+                    background-color: black;
+                    border-radius: 50%;
+                    display: none;
+                    z-index: 1000;
+                `;
+                return point;
+            }
+
+            initializeRandomPoint() {
+                const padding = 10;
+                // Calculate relative position within the paragraph
+                this.point = {
+                    left: Math.random() * (this.element.offsetWidth - 2 * padding) + padding,
+                    top: Math.random() * (this.element.offsetHeight - 2 * padding) + padding
+                };
+                
+                // Position the point element
+                this.pointElement.style.left = `${this.point.left}px`;
+                this.pointElement.style.top = `${this.point.top}px`;
+            }
+
+            drawPoint(ctx) {
+                if (this.point) {
+                    ctx.beginPath();
+                    ctx.arc(this.point.x, this.point.y, 4, 0, Math.PI * 2);
+                    ctx.fillStyle = 'black';
+                    ctx.fill();
+                }
             }
 
             createElement() {
@@ -426,29 +573,19 @@
                 counterDiv.textContent = `${seconds}s`;
             }
 
-            setHighlight(isHighlighted, isRecording, isOutOfScreen = false) {
-                this.isOutOfScreen = isOutOfScreen;
-                if (!isRecording) {
-                    isHighlighted = false;
-                }
-                
+            setHighlight(isHighlighted, isRecording, isOutOfScreen) {
                 this.isHighlighted = isHighlighted;
-                if (isHighlighted && !isOutOfScreen) {
-                    this.element.classList.add('highlight');
-                    if (!this.lastUpdateTime) {
-                        this.lastUpdateTime = Date.now();
-                    }
-                } else {
-                    this.element.classList.remove('highlight');
-                    if (this.lastUpdateTime) {
-                        this.updateCounter();
-                        this.lastUpdateTime = null;
-                    }
+                this.element.classList.toggle('highlight', isHighlighted);
+                
+                if (document.body.classList.contains('playback-mode')) {
+                    this.pointElement.style.display = 'block';
                 }
             }
 
             appendTo(container) {
                 container.appendChild(this.element);
+                this.element.appendChild(this.pointElement);  // Add point to paragraph
+                this.initializeRandomPoint();
             }
 
             hideCounter(hide) {
@@ -728,6 +865,220 @@
             }
         }
 
+        class ReadingRecorder {
+            constructor() {
+                this.paragraphEvents = [];
+                this.startTime = null;
+                this.isRecording = false;
+                this.recordingDuration = 0;
+            }
+
+            startRecording() {
+                this.isRecording = true;
+                this.startTime = Date.now();
+            }
+
+            recordParagraphEvent(paragraphId, isHighlighted, timestamp) {
+                if (!this.isRecording) return;
+                const relativeTime = timestamp - this.startTime;
+                this.paragraphEvents.push({
+                    paragraphId,
+                    isHighlighted,
+                    time: relativeTime
+                });
+                this.recordingDuration = Math.max(this.recordingDuration, relativeTime);
+            }
+
+            stopRecording() {
+                this.isRecording = false;
+            }
+        }
+
+        class PlaybackController {
+            constructor(recorder, paragraphs) {
+                this.recorder = recorder;
+                this.paragraphs = paragraphs;
+                this.currentTime = 0;
+                this.isPlaying = true;
+                this.playbackSpeed = 1;
+                this.isFinished = false;
+                this.paragraphTimers = new Map();
+                
+                // Add line drawing setup
+                this.linesCanvas = document.getElementById('linesCanvas');
+                this.linesCtx = this.linesCanvas.getContext('2d');
+                this.lastHighlightedPoint = null;
+                this.previousHighlightedParagraph = null;
+                this.connections = [];
+                this.initializeCanvas();
+            }
+
+            initializeCanvas() {
+                this.linesCanvas.width = window.innerWidth;
+                this.linesCanvas.height = document.documentElement.scrollHeight;  // Use full document height
+
+                // Add scroll listener to redraw lines
+                window.addEventListener('scroll', () => {
+                    this.redrawAllLines();
+                });
+
+                window.addEventListener('resize', () => {
+                    this.linesCanvas.width = window.innerWidth;
+                    this.linesCanvas.height = document.documentElement.scrollHeight;
+                    this.redrawAllLines();
+                });
+
+                this.linesCtx.strokeStyle = 'rgba(255, 98, 0, 0.5)';
+                this.linesCtx.lineWidth = 2;
+            }
+
+            drawLineTo(fromParagraph, toParagraph) {
+                if (!fromParagraph || !toParagraph) return;
+
+                // Store the connection
+                this.connections.push({
+                    from: fromParagraph,
+                    to: toParagraph
+                });
+
+                this.redrawAllLines();
+            }
+
+            redrawAllLines() {
+                // Clear the canvas
+                this.linesCtx.clearRect(0, 0, this.linesCanvas.width, this.linesCanvas.height);
+
+                // Redraw all connections
+                this.connections.forEach(connection => {
+                    const fromRect = connection.from.pointElement.getBoundingClientRect();
+                    const toRect = connection.to.pointElement.getBoundingClientRect();
+
+                    const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+
+                    // Calculate absolute positions (including scroll)
+                    const fromX = fromRect.left + fromRect.width / 2;
+                    const fromY = fromRect.top + fromRect.height / 2 + scrollTop;
+                    const toX = toRect.left + toRect.width / 2;
+                    const toY = toRect.top + toRect.height / 2 + scrollTop;
+
+                    this.linesCtx.beginPath();
+                    this.linesCtx.moveTo(fromX, fromY);
+                    this.linesCtx.lineTo(toX, toY);
+                    this.linesCtx.stroke();
+                });
+            }
+
+            play() {
+                if (!this.isFinished) {
+                    this.isPlaying = true;
+                }
+            }
+
+            pause() {
+                this.isPlaying = false;
+            }
+
+            restart() {
+                this.currentTime = 0;
+                this.isPlaying = true;
+                this.isFinished = false;
+                
+                // Clear lines and connections
+                this.connections = [];
+                this.linesCtx.clearRect(0, 0, this.linesCanvas.width, this.linesCanvas.height);
+                this.previousHighlightedParagraph = null;
+
+                this.paragraphs.forEach(paragraph => {
+                    paragraph.setHighlight(false, true, false);
+                    paragraph.timeSpent = 0;
+                    paragraph.updateCounter();
+                });
+                this.updateParagraphStates(0);
+            }
+
+            updateParagraphStates(time) {
+                // Find all events up to current time
+                const events = this.recorder.paragraphEvents.filter(event => event.time <= time);
+                if (events.length === 0) {
+                    // Reset all timers if no events yet
+                    this.paragraphs.forEach(paragraph => {
+                        paragraph.setHighlight(false, true, false);
+                        paragraph.timeSpent = 0;
+                        paragraph.updateCounter();
+                    });
+                    return;
+                }
+
+                // Process events in chronological order to calculate time spent
+                const paragraphStates = new Map();  // Track current state of each paragraph
+                const timeSpent = new Map();  // Track time spent on each paragraph
+
+                let lastEventTime = 0;
+                events.forEach(event => {
+                    // Update time spent for previously highlighted paragraphs
+                    paragraphStates.forEach((isHighlighted, paragraphId) => {
+                        if (isHighlighted) {
+                            const currentTimeSpent = timeSpent.get(paragraphId) || 0;
+                            timeSpent.set(paragraphId, currentTimeSpent + (event.time - lastEventTime));
+                        }
+                    });
+
+                    // Update paragraph state
+                    paragraphStates.set(event.paragraphId, event.isHighlighted);
+                    lastEventTime = event.time;
+                });
+
+                // Update final time spent calculation up to current time
+                paragraphStates.forEach((isHighlighted, paragraphId) => {
+                    if (isHighlighted) {
+                        const currentTimeSpent = timeSpent.get(paragraphId) || 0;
+                        const additionalTime = time - lastEventTime;
+                        timeSpent.set(paragraphId, currentTimeSpent + additionalTime);
+                    }
+                });
+
+                // Update paragraphs with their current states and accumulated time
+                let currentHighlightedParagraph = null;
+                this.paragraphs.forEach(paragraph => {
+                    const isHighlighted = paragraphStates.get(paragraph.id) || false;
+                    const totalTimeSpent = timeSpent.get(paragraph.id) || 0;
+                    
+                    paragraph.setHighlight(isHighlighted, true, false);
+                    paragraph.timeSpent = totalTimeSpent;
+                    paragraph.updateCounter();
+
+                    if (isHighlighted) {
+                        currentHighlightedParagraph = paragraph;
+                    }
+                });
+
+                // Draw line between paragraphs when highlighting changes
+                if (currentHighlightedParagraph && 
+                    this.previousHighlightedParagraph && 
+                    currentHighlightedParagraph !== this.previousHighlightedParagraph) {
+                    this.drawLineTo(this.previousHighlightedParagraph, currentHighlightedParagraph);
+                }
+                this.previousHighlightedParagraph = currentHighlightedParagraph;
+            }
+
+            update(deltaTime) {
+                if (!this.isPlaying || this.isFinished) return;
+
+                this.currentTime += deltaTime;
+                
+                if (this.currentTime > this.recorder.recordingDuration) {
+                    this.isFinished = true;
+                    this.isPlaying = false;
+                    this.updateParagraphStates(this.recorder.recordingDuration);
+                    const playPauseButton = document.getElementById('playPauseButton');
+                    playPauseButton.textContent = 'Play';
+                    return;
+                }
+
+                this.updateParagraphStates(this.currentTime);
+            }
+        }
+
         document.addEventListener('DOMContentLoaded', () => {
             const leftText = `I have always loved objects of measurement and display such as our  family barometer, both real and imagined. Do you remember Frodo's  sword Sting in The Hobbit? It's one of those fantastic objects. Not  only is it perfectly made for its task-well-balanced, attractive, and  sharp-it has an additional and amazing ability: it detects the presence  of goblins and evil orcs. When danger approaches, Sting glows blue,  anticipating its own need and use. It is a trusty weapon, an infallible warning system, a handsome object, and a fantastic companion-for  a hobbit.
 
@@ -749,7 +1100,6 @@
             let isReadingMode = false;
             document.body.classList.add('calibration-mode');
 
-            // Update control button handlers
             const startButton = document.getElementById('startButton');
             const cursorToggle = document.getElementById('cursorToggle');
             const timerToggle = document.getElementById('timerToggle');
@@ -763,12 +1113,17 @@
                     startButton.disabled = true;
                     startButton.textContent = 'Reading Mode';
                     
-                    // Show paragraphs with transition
+                    // Enable finish button
+                    const finishButton = document.getElementById('finishButton');
+                    finishButton.disabled = false;
+                    
                     paragraphs.forEach(paragraph => {
                         paragraph.element.style.transition = 'opacity 0.5s ease';
                         paragraph.element.style.opacity = '1';
                         paragraph.element.style.pointerEvents = 'auto';
                     });
+
+                    recorder.startRecording();
                 }
             });
 
@@ -793,11 +1148,9 @@
                 });
             }
 
-            // Populate both containers
             populateContainer('leftTextContainer', leftText);
             populateContainer('rightTextContainer', rightText);
 
-            // Initialize heatmaps for both containers
             const leftContainer = document.getElementById('leftTextContainer');
             const rightContainer = document.getElementById('rightTextContainer');
             const leftHeatmapCanvas = document.getElementById('leftHeatmapCanvas');
@@ -813,7 +1166,6 @@
                 rightHeatmapCanvas.classList.toggle('visible', heatmapToggle.checked);
             });
 
-            // Animation loop for both heatmaps
             function animate() {
                 if (heatmapToggle.checked) {
                     leftHeatmap.draw();
@@ -824,9 +1176,8 @@
             animate();
 
             const focusManager = new FocusManager();
-            window.focusManager = focusManager; // Make focusManager globally accessible
+            window.focusManager = focusManager;
 
-            // Update the interval to use focusManager
             setInterval(() => {
                 if (isReadingMode) {
                     checkOverlap(cursor, paragraphs, true, focusManager);
@@ -845,12 +1196,84 @@
                     });
                 }
             }, 100);
+
+            const recorder = new ReadingRecorder();
+            const finishButton = document.getElementById('finishButton');
+            const playPauseButton = document.getElementById('playPauseButton');
+            const resetButton = document.getElementById('resetButton');
+
+            finishButton.addEventListener('click', () => {
+                if (isReadingMode) {
+                    recorder.stopRecording();
+                    isReadingMode = false;
+                    document.body.classList.remove('reading-mode');
+                    document.body.classList.add('playback-mode');
+
+                    disableEyeTracking();
+
+                    // Hide cursor and calibration elements, but keep timers visible
+                    cursor.style.display = 'none';
+                    document.getElementById('calib_cursor').style.display = 'none';
+                    document.querySelector('.calibration-message').style.display = 'none';
+
+                    // Ensure all timers are visible
+                    document.querySelectorAll('.time-counter').forEach(counter => {
+                        counter.style.display = 'block';
+                    });
+
+                    // Initialize playback with only paragraphs
+                    const playbackController = new PlaybackController(recorder, paragraphs);
+
+                    playPauseButton.addEventListener('click', () => {
+                        if (playbackController.isPlaying) {
+                            playbackController.pause();
+                            playPauseButton.textContent = 'Play';
+                        } else if (!playbackController.isFinished) {
+                            playbackController.play();
+                            playPauseButton.textContent = 'Pause';
+                        }
+                    });
+
+                    resetButton.addEventListener('click', () => {
+                        playbackController.restart();
+                        playPauseButton.textContent = 'Pause';
+                    });
+
+                    let lastTime = performance.now();
+                    function animate(currentTime) {
+                        const deltaTime = currentTime - lastTime;
+                        lastTime = currentTime;
+
+                        playbackController.update(deltaTime);
+                        requestAnimationFrame(animate);
+                    }
+                    requestAnimationFrame(animate);
+
+                    // Initialize and show points for all paragraphs
+                    paragraphs.forEach(p => {
+                        p.initializeRandomPoint();
+                        p.pointElement.style.display = 'block';  // Show all points immediately
+                    });
+                }
+            });
+
+            setInterval(() => {
+                if (isReadingMode && recorder.isRecording) {
+                    const timestamp = Date.now();
+                    paragraphs.forEach(paragraph => {
+                        recorder.recordParagraphEvent(
+                            paragraph.id,
+                            paragraph.isHighlighted,
+                            timestamp
+                        );
+                    });
+                }
+            }, 100);
         });
 
-        // Add event listener for visibility change
         document.addEventListener('visibilitychange', () => {
             if (document.hidden) {
-                const focusManager = window.focusManager; // You'll need to make focusManager globally accessible
+                const focusManager = window.focusManager;
                 focusManager.handleCursorOutOfScreen();
             }
         });
