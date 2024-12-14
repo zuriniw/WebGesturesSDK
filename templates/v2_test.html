@@ -441,6 +441,17 @@
     .calibration-mode .control-panel > *:not(#startButton) {
         display: none !important;
     }
+
+    /* Add style for ripple canvas */
+    .ripple-canvas {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        pointer-events: none;
+        z-index: 1002;  /* Higher than lines and points */
+    }
   </style>
 </head>
 <body style="height: 100vh; overflow-y: auto;">
@@ -541,8 +552,11 @@
                 this.isOutOfScreen = false;
                 this.point = null;
                 this.pointElement = this.createPointElement();
-                this.rippleRadius = 0; // Initialize ripple radius
-                this.rippleInterval = null; // Store interval for ripples
+                this.rippleRadii = [0];
+                this.rippleInterval = null;
+                this.activeRipples = new Set();
+                this.isPaused = false;
+                this.rippleContainers = new Set();
             }
 
             createPointElement() {
@@ -551,7 +565,8 @@
                     position: absolute;
                     width: 8px;
                     height: 8px;
-                    background-color: rgb(131, 0, 0);
+                    background-color: transparent;
+                    border: 2px solid black;
                     border-radius: 50%;
                     display: none;
                     z-index: 1000;
@@ -561,51 +576,91 @@
             }
 
             startRippleEffect() {
-                this.rippleRadius = 0; // Reset ripple radius
-                this.rippleInterval = setInterval(() => {
-                    this.rippleRadius += 8; // Increase radius by 8px each time (was 4px)
-                    this.drawRipple();
-                }, 200); // Every 0.2 seconds (was 0.1 seconds) - creates bigger gaps between circles
-            }
+                if (this.isPaused) {
+                    this.isPaused = false;
+                } else {
+                    this.activeRipples.add([0]);
+                }
 
-            stopRippleEffect() {
-                clearInterval(this.rippleInterval);
-                this.rippleRadius = 0; // Reset ripple radius
+                this.rippleInterval = setInterval(() => {
+                    this.activeRipples.forEach(rippleSet => {
+                        rippleSet.push(rippleSet[rippleSet.length - 1] + 2.4);
+                        if (rippleSet.length > 10) {
+                            rippleSet.shift();
+                        }
+                    });
+                    this.drawRipple();
+                }, 100);
             }
 
             drawRipple() {
                 const pointRect = this.pointElement.getBoundingClientRect();
+                const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
                 const centerX = pointRect.left + pointRect.width / 2;
-                const centerY = pointRect.top + pointRect.height / 2;
+                const centerY = pointRect.top + scrollTop + pointRect.height / 2;
 
                 const rippleCanvas = document.createElement('canvas');
+                rippleCanvas.className = 'ripple-canvas';
                 rippleCanvas.width = window.innerWidth;
-                rippleCanvas.height = window.innerHeight;
+                rippleCanvas.height = document.documentElement.scrollHeight;
+                rippleCanvas.style.top = '0';
+                rippleCanvas.style.position = 'absolute';
+
                 const rippleCtx = rippleCanvas.getContext('2d');
-
                 rippleCtx.clearRect(0, 0, rippleCanvas.width, rippleCanvas.height);
-                rippleCtx.beginPath();
-                rippleCtx.arc(centerX, centerY, this.rippleRadius, 0, Math.PI * 2);
-                rippleCtx.strokeStyle = 'rgba(255, 98, 0, 0.3)'; // More transparent (was 0.5)
-                rippleCtx.lineWidth = 3; // Thicker line (was 2)
-                rippleCtx.stroke();
 
-                document.body.appendChild(rippleCanvas);
+                this.activeRipples.forEach(rippleSet => {
+                    rippleSet.forEach(radius => {
+                        rippleCtx.beginPath();
+                        rippleCtx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+                        rippleCtx.strokeStyle = 'rgba(0, 0, 0, 0.3)';
+                        rippleCtx.lineWidth = 2;
+                        rippleCtx.stroke();
+                    });
+                });
 
-                setTimeout(() => {
-                    document.body.removeChild(rippleCanvas);
-                }, 1500); // Keep circles visible longer (was 1000)
+                const rippleContainer = document.createElement('div');
+                rippleContainer.style.cssText = `
+                    position: absolute;
+                    top: 0;
+                    left: 0;
+                    width: 100%;
+                    height: ${document.documentElement.scrollHeight}px;
+                    pointer-events: none;
+                    z-index: 1002;
+                `;
+                rippleContainer.appendChild(rippleCanvas);
+                document.body.appendChild(rippleContainer);
+                this.rippleContainers.add(rippleContainer);
+            }
+
+            stopRippleEffect() {
+                clearInterval(this.rippleInterval);
+                this.isPaused = true;
+            }
+
+            resetRipples() {
+                this.activeRipples.clear();
+                this.isPaused = false;
+                this.rippleContainers.forEach(container => {
+                    if (document.body.contains(container)) {
+                        document.body.removeChild(container);
+                    }
+                });
+                this.rippleContainers.clear();
             }
 
             initializeRandomPoint() {
-                const padding = 10;
-                // Calculate relative position within the paragraph
+                const padding = 50;
+                const centerX = this.element.offsetWidth / 2;
+                const centerY = this.element.offsetHeight / 2;
+                const maxOffset = Math.min(centerX, centerY) / 2;
+                
                 this.point = {
-                    left: Math.random() * (this.element.offsetWidth - 2 * padding) + padding,
-                    top: Math.random() * (this.element.offsetHeight - 2 * padding) + padding
+                    left: centerX + (Math.random() - 0.5) * maxOffset,
+                    top: centerY + (Math.random() - 0.5) * maxOffset
                 };
                 
-                // Position the point element
                 this.pointElement.style.left = `${this.point.left}px`;
                 this.pointElement.style.top = `${this.point.top}px`;
             }
@@ -648,14 +703,11 @@
                 const counterDiv = this.element.querySelector('.time-counter');
                 counterDiv.textContent = `${seconds}s`;
 
-                // Update point size and paragraph background in playback mode
                 if (document.body.classList.contains('playback-mode')) {
-                    // Make point size change more dramatic
                     const scale = 1 + (this.timeSpent / 1000) * 0.5;
                     this.pointElement.style.transform = `scale(${scale})`;
 
-                    // Start ripple effect when highlighted
-                    if (this.isHighlighted && this.rippleRadius === 0) {
+                    if (this.isHighlighted && this.rippleRadii.length === 0) {
                         this.startRippleEffect();
                     } else if (!this.isHighlighted) {
                         this.stopRippleEffect();
@@ -692,7 +744,7 @@
 
             appendTo(container) {
                 container.appendChild(this.element);
-                this.element.appendChild(this.pointElement);  // Add point to paragraph
+                this.element.appendChild(this.pointElement);
                 this.initializeRandomPoint();
             }
 
@@ -768,11 +820,9 @@
         }
 
         function findNearestParagraph(cursorX, cursorY, paragraphs) {
-            // First determine which side the cursor is on
             const midScreen = window.innerWidth / 2;
             const isLeftSide = cursorX < midScreen;
             
-            // Filter paragraphs based on side
             const sideParagraphs = paragraphs.filter(paragraph => {
                 const rect = paragraph.element.getBoundingClientRect();
                 return (cursorX < midScreen) === (rect.left < midScreen);
@@ -780,45 +830,38 @@
 
             if (sideParagraphs.length === 0) return null;
 
-            // Get the rectangles and sort them by vertical position
             const paragraphRects = sideParagraphs.map(paragraph => ({
                 paragraph,
                 rect: paragraph.element.getBoundingClientRect()
             })).sort((a, b) => a.rect.top - b.rect.top);
 
-            // Check if cursor is directly within any paragraph's vertical bounds
             for (const {paragraph, rect} of paragraphRects) {
                 if (isInVerticalBounds(cursorY, rect)) {
                     return paragraph;
                 }
             }
 
-            // If not within any paragraph, find the nearest paragraph boundary
             let nearestParagraph = null;
             let minDistance = Infinity;
 
             paragraphRects.forEach(({paragraph, rect}, index) => {
-                // Check distance to top boundary
                 let distanceToTop = Math.abs(cursorY - rect.top);
                 if (distanceToTop < minDistance) {
                     minDistance = distanceToTop;
                     nearestParagraph = paragraph;
                 }
 
-                // Check distance to bottom boundary
                 let distanceToBottom = Math.abs(cursorY - rect.bottom);
                 if (distanceToBottom < minDistance) {
                     minDistance = distanceToBottom;
                     nearestParagraph = paragraph;
                 }
 
-                // If this is not the last paragraph, check the gap between this and next paragraph
                 if (index < paragraphRects.length - 1) {
                     const nextRect = paragraphRects[index + 1].rect;
                     const gapMiddle = (rect.bottom + nextRect.top) / 2;
                     
                     if (cursorY > rect.bottom && cursorY < nextRect.top) {
-                        // If cursor is in the gap, compare distances to adjacent paragraphs
                         const distanceToThis = Math.abs(cursorY - rect.bottom);
                         const distanceToNext = Math.abs(cursorY - nextRect.top);
                         if (distanceToThis <= distanceToNext) {
@@ -840,14 +883,12 @@
             const viewportWidth = window.innerWidth;
             const viewportHeight = window.innerHeight;
 
-            // Simpler out-of-screen detection: if cursor is not visible in viewport
             if (cursorX < 0 || cursorY < 0 || 
                 cursorX > viewportWidth || cursorY > viewportHeight || 
                 !document.hasFocus()) {
                 
                 focusManager.handleCursorOutOfScreen();
                 
-                // Keep last active paragraph highlighted if within timeout
                 if (focusManager.lastActiveParagraph && 
                     Date.now() - focusManager.lastActiveTime < focusManager.TIMEOUT_DURATION) {
                     focusManager.lastActiveParagraph.setHighlight(true, isRecording, true);
@@ -857,7 +898,6 @@
 
             focusManager.handleCursorInScreen();
 
-            // Only proceed with paragraph detection if not obscured
             if (focusManager.isActive()) {
                 const nearestParagraph = findNearestParagraph(cursorX, cursorY, paragraphs);
                 
@@ -1012,7 +1052,6 @@
                 this.isFinished = false;
                 this.paragraphTimers = new Map();
                 
-                // Add line drawing setup
                 this.linesCanvas = document.getElementById('linesCanvas');
                 this.linesCtx = this.linesCanvas.getContext('2d');
                 this.lastHighlightedPoint = null;
@@ -1031,14 +1070,13 @@
                     this.redrawAllLines();
                 });
 
-                this.linesCtx.strokeStyle = 'rgba(246, 141, 141, 0.3)';
+                this.linesCtx.strokeStyle = 'rgba(0, 0, 0, 0.3)';
                 this.linesCtx.lineWidth = 2;
             }
 
             drawLineTo(fromParagraph, toParagraph) {
                 if (!fromParagraph || !toParagraph) return;
 
-                // Store the connection
                 this.connections.push({
                     from: fromParagraph,
                     to: toParagraph
@@ -1048,17 +1086,14 @@
             }
 
             redrawAllLines() {
-                // Clear the canvas
                 this.linesCtx.clearRect(0, 0, this.linesCanvas.width, this.linesCanvas.height);
 
-                // Redraw all connections
                 this.connections.forEach(connection => {
                     const fromRect = connection.from.pointElement.getBoundingClientRect();
                     const toRect = connection.to.pointElement.getBoundingClientRect();
 
                     const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
 
-                    // Calculate absolute positions (including scroll)
                     const fromX = fromRect.left + fromRect.width / 2;
                     const fromY = fromRect.top + fromRect.height / 2 + scrollTop;
                     const toX = toRect.left + toRect.width / 2;
@@ -1087,7 +1122,6 @@
                 this.isFinished = false;
                 this.playbackSpeed = this.recorder.recordingDuration / 10000;
                 
-                // Clear lines and connections
                 this.connections = [];
                 this.linesCtx.clearRect(0, 0, this.linesCanvas.width, this.linesCanvas.height);
                 this.previousHighlightedParagraph = null;
@@ -1096,15 +1130,14 @@
                     paragraph.setHighlight(false, true, false);
                     paragraph.timeSpent = 0;
                     paragraph.updateCounter();
+                    paragraph.resetRipples();
                 });
                 this.updateParagraphStates(0);
             }
 
             updateParagraphStates(time) {
-                // Find all events up to current time
                 const events = this.recorder.paragraphEvents.filter(event => event.time <= time);
                 if (events.length === 0) {
-                    // Reset all timers if no events yet
                     this.paragraphs.forEach(paragraph => {
                         paragraph.setHighlight(false, true, false);
                         paragraph.timeSpent = 0;
@@ -1113,13 +1146,11 @@
                     return;
                 }
 
-                // Process events in chronological order to calculate time spent
-                const paragraphStates = new Map();  // Track current state of each paragraph
-                const timeSpent = new Map();  // Track time spent on each paragraph
+                const paragraphStates = new Map();
+                const timeSpent = new Map();
 
                 let lastEventTime = 0;
                 events.forEach(event => {
-                    // Update time spent for previously highlighted paragraphs
                     paragraphStates.forEach((isHighlighted, paragraphId) => {
                         if (isHighlighted) {
                             const currentTimeSpent = timeSpent.get(paragraphId) || 0;
@@ -1127,12 +1158,10 @@
                         }
                     });
 
-                    // Update paragraph state
                     paragraphStates.set(event.paragraphId, event.isHighlighted);
                     lastEventTime = event.time;
                 });
 
-                // Update final time spent calculation up to current time
                 paragraphStates.forEach((isHighlighted, paragraphId) => {
                     if (isHighlighted) {
                         const currentTimeSpent = timeSpent.get(paragraphId) || 0;
@@ -1141,14 +1170,11 @@
                     }
                 });
 
-                // Update paragraphs with their current states and accumulated time
                 let currentHighlightedParagraph = null;
                 
-                // First, clear all highlights and set base styles
                 this.paragraphs.forEach(paragraph => {
                     paragraph.element.style.border = 'none';
                     paragraph.isHighlighted = false;
-                    // Update background color in real time with halved rate
                     const darkness = Math.min(0.5, paragraph.timeSpent / 20000);
                     paragraph.element.style.backgroundColor = `rgba(0, 0, 0, ${darkness})`;
                     paragraph.element.style.color = darkness > 0.3 ? 'white' : 'black';
@@ -1167,7 +1193,6 @@
                     }
                 });
 
-                // Set highlight for current paragraph only
                 if (currentHighlightedParagraph) {
                     currentHighlightedParagraph.element.style.border = '2px solid black';
                     currentHighlightedParagraph.element.style.backgroundColor = '#ffffff';
@@ -1175,9 +1200,16 @@
                     currentHighlightedParagraph.element.style.zIndex = '2';
                     currentHighlightedParagraph.element.style.isolation = 'isolate';
                     currentHighlightedParagraph.element.style.mixBlendMode = 'normal';
+                    if (currentHighlightedParagraph !== this.previousHighlightedParagraph) {
+                        currentHighlightedParagraph.startRippleEffect();
+                    }
                 }
 
-                // Draw line between paragraphs when highlighting changes
+                if (this.previousHighlightedParagraph && 
+                    currentHighlightedParagraph !== this.previousHighlightedParagraph) {
+                    this.previousHighlightedParagraph.stopRippleEffect();
+                }
+
                 if (currentHighlightedParagraph && 
                     this.previousHighlightedParagraph && 
                     currentHighlightedParagraph !== this.previousHighlightedParagraph &&
@@ -1190,28 +1222,23 @@
             update(deltaTime) {
                 if (!this.isPlaying || this.isFinished) {
                     if (this.isFinished) {
-                        // When finished, make all paragraphs grey based on their time spent
                         this.paragraphs.forEach(paragraph => {
                             const darkness = Math.min(0.5, paragraph.timeSpent / 20000);
                             paragraph.element.style.backgroundColor = `rgba(0, 0, 0, ${darkness})`;
                             paragraph.element.style.color = darkness > 0.3 ? 'white' : 'black';
-                            // Remove ALL styles that might indicate highlighting
                             paragraph.element.style.border = 'none';
                             paragraph.element.style.outline = 'none';
                             paragraph.element.style.boxShadow = 'none';
                             paragraph.isHighlighted = false;
                             paragraph.element.classList.remove('highlight');
-                            paragraph.element.style.zIndex = '1';  // Reset z-index
+                            paragraph.element.style.zIndex = '1';
                             paragraph.element.style.position = 'relative';
                         });
-                        // Clear highlight tracking
                         this.previousHighlightedParagraph = null;
-                        // Stop any ongoing effects
                         this.paragraphs.forEach(p => {
                             if (p.rippleInterval) {
                                 clearInterval(p.rippleInterval);
                             }
-                            // Ensure point display is maintained but no highlight effects
                             p.pointElement.style.display = 'block';
                         });
                     }
@@ -1267,7 +1294,6 @@
                     startButton.disabled = true;
                     startButton.textContent = 'Reading Mode';
                     
-                    // Enable finish button
                     const finishButton = document.getElementById('finishButton');
                     finishButton.disabled = false;
                     
@@ -1365,17 +1391,14 @@
 
                     disableEyeTracking();
 
-                    // Hide cursor and calibration elements, but keep timers visible
                     cursor.style.display = 'none';
                     document.getElementById('calib_cursor').style.display = 'none';
                     document.querySelector('.calibration-message').style.display = 'none';
 
-                    // Ensure all timers are visible
                     document.querySelectorAll('.time-counter').forEach(counter => {
                         counter.style.display = 'block';
                     });
 
-                    // Initialize playback with only paragraphs
                     const playbackController = new PlaybackController(recorder, paragraphs);
                     console.log(`Playback speed: ${playbackController.playbackSpeed}x`);
 
@@ -1404,10 +1427,9 @@
                     }
                     requestAnimationFrame(animate);
 
-                    // Initialize and show points for all paragraphs
                     paragraphs.forEach(p => {
                         p.initializeRandomPoint();
-                        p.pointElement.style.display = 'block';  // Show all points immediately
+                        p.pointElement.style.display = 'block';
                     });
                 }
             });
