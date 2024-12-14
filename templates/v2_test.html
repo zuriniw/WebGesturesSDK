@@ -517,6 +517,7 @@
                     border-radius: 50%;
                     display: none;
                     z-index: 1000;
+                    transition: all 0.3s ease;
                 `;
                 return point;
             }
@@ -571,14 +572,42 @@
                 const seconds = (this.timeSpent / 1000).toFixed(1);
                 const counterDiv = this.element.querySelector('.time-counter');
                 counterDiv.textContent = `${seconds}s`;
+
+                // Update point size and paragraph background in playback mode
+                if (document.body.classList.contains('playback-mode')) {
+                    // Make point size change more dramatic
+                    const scale = 1 + (this.timeSpent / 1000) * 0.5;
+                    this.pointElement.style.transform = `scale(${scale})`;
+
+                    // Only update background if not highlighted
+                    if (!this.isHighlighted) {
+                        const darkness = Math.min(0.5, this.timeSpent / 10000);
+                        this.element.style.backgroundColor = `rgba(0, 0, 0, ${darkness})`;
+                        this.element.style.color = darkness > 0.3 ? 'white' : 'black';
+                    }
+                }
             }
 
             setHighlight(isHighlighted, isRecording, isOutOfScreen) {
                 this.isHighlighted = isHighlighted;
-                this.element.classList.toggle('highlight', isHighlighted);
                 
                 if (document.body.classList.contains('playback-mode')) {
                     this.pointElement.style.display = 'block';
+                    if (isHighlighted) {
+                        // Only set background color, no shadow in playback mode
+                        this.element.style.backgroundColor = '#fff3e6';
+                        this.element.style.color = 'black';
+                        this.element.style.boxShadow = 'none';  // Explicitly remove any shadow
+                    } else {
+                        // Non-highlighted paragraphs get grey based on time spent
+                        const darkness = Math.min(0.5, this.timeSpent / 10000);
+                        this.element.style.backgroundColor = `rgba(0, 0, 0, ${darkness})`;
+                        this.element.style.color = darkness > 0.3 ? 'white' : 'black';
+                        this.element.style.boxShadow = 'none';
+                    }
+                } else {
+                    // Only use highlight class in reading mode
+                    this.element.classList.toggle('highlight', isHighlighted);
                 }
             }
 
@@ -1062,7 +1091,17 @@
             }
 
             update(deltaTime) {
-                if (!this.isPlaying || this.isFinished) return;
+                if (!this.isPlaying || this.isFinished) {
+                    if (this.isFinished) {
+                        // When finished, make sure last highlighted paragraph becomes grey
+                        this.paragraphs.forEach(paragraph => {
+                            const darkness = Math.min(0.5, paragraph.timeSpent / 10000);
+                            paragraph.element.style.backgroundColor = `rgba(0, 0, 0, ${darkness})`;
+                            paragraph.element.style.color = darkness > 0.3 ? 'white' : 'black';
+                        });
+                    }
+                    return;
+                }
 
                 this.currentTime += deltaTime;
                 
