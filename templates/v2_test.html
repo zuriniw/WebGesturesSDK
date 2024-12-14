@@ -111,6 +111,7 @@
         border-radius: 8px;
         line-height: 1.6;
         font-size: 1.1em;
+        position: relative;
     }
 
     .paragraph-chunk {
@@ -300,9 +301,30 @@
         opacity: 0;
         pointer-events: none;
     }
+
+    .heatmap-canvas {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        pointer-events: none;
+        opacity: 0.6;
+        z-index: 2;
+        display: none;
+    }
+
+    .heatmap-canvas.visible {
+        display: block;
+    }
+
+    .text-container-wrapper {
+        position: relative;
+    }
   </style>
 </head>
 <body style="height: 100vh;">
+    <canvas id="heatmapCanvas" class="heatmap-canvas"></canvas>
     <div class="page-title">
         Inquiry into Eye-Gesture Powered Reading Experience
     </div>
@@ -311,11 +333,13 @@
         <div class="row main-content">
             <div class="col-6">
                 <div class="text-container" id="leftTextContainer">
+                    <canvas id="leftHeatmapCanvas" class="heatmap-canvas"></canvas>
                     <!-- Left paragraphs will be inserted here -->
                 </div>
             </div>
             <div class="col-6">
                 <div class="text-container" id="rightTextContainer">
+                    <canvas id="rightHeatmapCanvas" class="heatmap-canvas"></canvas>
                     <!-- Right paragraphs will be inserted here -->
                 </div>
             </div>
@@ -340,6 +364,14 @@
             </label>
             <span class="toggle-label">Timer</span>
         </div>
+
+        <div style="display: flex; align-items: center;">
+            <label class="toggle-switch">
+                <input type="checkbox" id="heatmapToggle">
+                <span class="toggle-slider"></span>
+            </label>
+            <span class="toggle-label">Heatmap</span>
+        </div>
     </div>
 
     <div class="calibration-message">
@@ -361,6 +393,7 @@
                 this.timeSpent = 0;
                 this.isHighlighted = false;
                 this.lastUpdateTime = null;
+                this.isOutOfScreen = false;
             }
 
             createElement() {
@@ -383,7 +416,7 @@
 
             updateCounter() {
                 const now = Date.now();
-                if (this.isHighlighted && this.lastUpdateTime) {
+                if (this.isHighlighted && this.lastUpdateTime && !this.isOutOfScreen) {
                     this.timeSpent += now - this.lastUpdateTime;
                 }
                 this.lastUpdateTime = now;
@@ -393,13 +426,14 @@
                 counterDiv.textContent = `${seconds}s`;
             }
 
-            setHighlight(isHighlighted, isRecording) {
+            setHighlight(isHighlighted, isRecording, isOutOfScreen = false) {
+                this.isOutOfScreen = isOutOfScreen;
                 if (!isRecording) {
                     isHighlighted = false;
                 }
                 
                 this.isHighlighted = isHighlighted;
-                if (isHighlighted) {
+                if (isHighlighted && !isOutOfScreen) {
                     this.element.classList.add('highlight');
                     if (!this.lastUpdateTime) {
                         this.lastUpdateTime = Date.now();
@@ -435,16 +469,263 @@
             }
         }
 
-        function checkOverlap(cursor, paragraphs, isRecording) {
-            const cursorRect = cursor.getBoundingClientRect();
-            paragraphs.forEach(paragraph => {
-                const elementRect = paragraph.element.getBoundingClientRect();
-                const isOverlapping = (cursorRect.right > elementRect.left && 
-                                     cursorRect.right < elementRect.right &&
-                                     cursorRect.top < elementRect.bottom && 
-                                     cursorRect.top > elementRect.top);
-                paragraph.setHighlight(isOverlapping, isRecording);
+        class FocusManager {
+            constructor() {
+                this.lastActiveTime = Date.now();
+                this.lastActiveParagraph = null;
+                this.outOfScreenTimer = null;
+                this.TIMEOUT_DURATION = 4000;
+                this.isObscured = false;
+                this.isOutOfScreen = false;
+            }
+
+            handleCursorOutOfScreen() {
+                this.isOutOfScreen = true;
+                if (this.outOfScreenTimer) clearTimeout(this.outOfScreenTimer);
+                
+                this.outOfScreenTimer = setTimeout(() => {
+                    document.querySelectorAll('.text-container').forEach(container => {
+                        container.classList.add('fully-obscured');
+                    });
+                    this.lastActiveParagraph = null;
+                    this.isObscured = true;
+                }, this.TIMEOUT_DURATION);
+            }
+
+            handleCursorInScreen() {
+                this.isOutOfScreen = false;
+                if (this.outOfScreenTimer) {
+                    clearTimeout(this.outOfScreenTimer);
+                    this.outOfScreenTimer = null;
+                }
+                if (this.isObscured) {
+                    document.querySelectorAll('.text-container').forEach(container => {
+                        container.classList.remove('fully-obscured');
+                    });
+                    this.isObscured = false;
+                }
+            }
+
+            updateLastActiveParagraph(paragraph) {
+                if (!this.isObscured) {
+                    this.lastActiveParagraph = paragraph;
+                    this.lastActiveTime = Date.now();
+                }
+            }
+
+            isActive() {
+                return !this.isObscured;
+            }
+        }
+
+        function isInVerticalBounds(cursorY, rect) {
+            return cursorY >= rect.top && cursorY <= rect.bottom;
+        }
+
+        function findNearestParagraph(cursorX, cursorY, paragraphs) {
+            // First determine which side the cursor is on
+            const midScreen = window.innerWidth / 2;
+            const isLeftSide = cursorX < midScreen;
+            
+            // Filter paragraphs based on side
+            const sideParagraphs = paragraphs.filter(paragraph => {
+                const rect = paragraph.element.getBoundingClientRect();
+                return (cursorX < midScreen) === (rect.left < midScreen);
             });
+
+            if (sideParagraphs.length === 0) return null;
+
+            // Get the rectangles and sort them by vertical position
+            const paragraphRects = sideParagraphs.map(paragraph => ({
+                paragraph,
+                rect: paragraph.element.getBoundingClientRect()
+            })).sort((a, b) => a.rect.top - b.rect.top);
+
+            // Check if cursor is directly within any paragraph's vertical bounds
+            for (const {paragraph, rect} of paragraphRects) {
+                if (isInVerticalBounds(cursorY, rect)) {
+                    return paragraph;
+                }
+            }
+
+            // If not within any paragraph, find the nearest paragraph boundary
+            let nearestParagraph = null;
+            let minDistance = Infinity;
+
+            paragraphRects.forEach(({paragraph, rect}, index) => {
+                // Check distance to top boundary
+                let distanceToTop = Math.abs(cursorY - rect.top);
+                if (distanceToTop < minDistance) {
+                    minDistance = distanceToTop;
+                    nearestParagraph = paragraph;
+                }
+
+                // Check distance to bottom boundary
+                let distanceToBottom = Math.abs(cursorY - rect.bottom);
+                if (distanceToBottom < minDistance) {
+                    minDistance = distanceToBottom;
+                    nearestParagraph = paragraph;
+                }
+
+                // If this is not the last paragraph, check the gap between this and next paragraph
+                if (index < paragraphRects.length - 1) {
+                    const nextRect = paragraphRects[index + 1].rect;
+                    const gapMiddle = (rect.bottom + nextRect.top) / 2;
+                    
+                    if (cursorY > rect.bottom && cursorY < nextRect.top) {
+                        // If cursor is in the gap, compare distances to adjacent paragraphs
+                        const distanceToThis = Math.abs(cursorY - rect.bottom);
+                        const distanceToNext = Math.abs(cursorY - nextRect.top);
+                        if (distanceToThis <= distanceToNext) {
+                            return paragraph;
+                        } else {
+                            return paragraphRects[index + 1].paragraph;
+                        }
+                    }
+                }
+            });
+
+            return nearestParagraph;
+        }
+
+        function checkOverlap(cursor, paragraphs, isRecording, focusManager) {
+            const cursorRect = cursor.getBoundingClientRect();
+            const cursorX = cursorRect.left + cursorRect.width / 2;
+            const cursorY = cursorRect.top + cursorRect.height / 2;
+            const viewportWidth = window.innerWidth;
+            const viewportHeight = window.innerHeight;
+
+            // Simpler out-of-screen detection: if cursor is not visible in viewport
+            if (cursorX < 0 || cursorY < 0 || 
+                cursorX > viewportWidth || cursorY > viewportHeight || 
+                !document.hasFocus()) {
+                
+                focusManager.handleCursorOutOfScreen();
+                
+                // Keep last active paragraph highlighted if within timeout
+                if (focusManager.lastActiveParagraph && 
+                    Date.now() - focusManager.lastActiveTime < focusManager.TIMEOUT_DURATION) {
+                    focusManager.lastActiveParagraph.setHighlight(true, isRecording, true);
+                }
+                return;
+            }
+
+            focusManager.handleCursorInScreen();
+
+            // Only proceed with paragraph detection if not obscured
+            if (focusManager.isActive()) {
+                const nearestParagraph = findNearestParagraph(cursorX, cursorY, paragraphs);
+                
+                paragraphs.forEach(paragraph => {
+                    const isNearest = paragraph === nearestParagraph;
+                    paragraph.setHighlight(isNearest, isRecording, false);
+                    if (isNearest) {
+                        focusManager.updateLastActiveParagraph(paragraph);
+                    }
+                });
+            }
+        }
+
+        class Heatmap {
+            constructor(canvas, container) {
+                this.canvas = canvas;
+                this.container = container;
+                this.ctx = canvas.getContext('2d');
+                this.points = [];
+                this.maxPoints = 1000;
+                this.radius = 30;
+                this.intensity = 0.05;
+                this.decay = 0.995;
+                this.colorScale = [
+                    { r: 0, g: 0, b: 255, a: 0 },
+                    { r: 255, g: 0, b: 0, a: 0.5 }
+                ];
+                
+                this.resizeCanvas();
+                this.container.addEventListener('scroll', () => this.resizeCanvas());
+                window.addEventListener('resize', () => this.resizeCanvas());
+            }
+
+            resizeCanvas() {
+                const rect = this.container.getBoundingClientRect();
+                this.canvas.width = rect.width;
+                this.canvas.height = this.container.scrollHeight;
+                this.draw();
+            }
+
+            addPoint(x, y) {
+                const rect = this.container.getBoundingClientRect();
+                const scrollTop = this.container.scrollTop;
+                const relativeX = x - rect.left;
+                const relativeY = y - rect.top + scrollTop;
+
+                if (relativeX >= 0 && relativeX <= rect.width &&
+                    relativeY >= 0 && relativeY <= this.container.scrollHeight) {
+                    this.points.push({ 
+                        x: relativeX, 
+                        y: relativeY, 
+                        intensity: this.intensity 
+                    });
+                    if (this.points.length > this.maxPoints) {
+                        this.points.shift();
+                    }
+                }
+            }
+
+            clear() {
+                this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+            }
+
+            draw() {
+                this.clear();
+                
+                const imageData = this.ctx.createImageData(this.canvas.width, this.canvas.height);
+                const data = imageData.data;
+
+                this.points = this.points.filter(point => {
+                    point.intensity *= this.decay;
+                    return point.intensity > 0.001;
+                });
+
+                for (let y = 0; y < this.canvas.height; y++) {
+                    for (let x = 0; x < this.canvas.width; x++) {
+                        let heat = 0;
+                        
+                        this.points.forEach(point => {
+                            const distance = Math.sqrt(
+                                Math.pow(x - point.x, 2) + 
+                                Math.pow(y - point.y, 2)
+                            );
+                            if (distance < this.radius) {
+                                heat += (1 - distance / this.radius) * point.intensity;
+                            }
+                        });
+
+                        heat = Math.min(1, Math.max(0, heat));
+
+                        const index = (y * this.canvas.width + x) * 4;
+                        const color = this.getColor(heat);
+                        data[index] = color.r;
+                        data[index + 1] = color.g;
+                        data[index + 2] = color.b;
+                        data[index + 3] = Math.floor(color.a * 255);
+                    }
+                }
+
+                this.ctx.putImageData(imageData, 0, 0);
+            }
+
+            getColor(value) {
+                const color1 = this.colorScale[0];
+                const color2 = this.colorScale[1];
+                
+                return {
+                    r: Math.floor(color1.r + (color2.r - color1.r) * value),
+                    g: Math.floor(color1.g + (color2.g - color1.g) * value),
+                    b: Math.floor(color1.b + (color2.b - color1.b) * value),
+                    a: color1.a + (color2.a - color1.a) * value
+                };
+            }
         }
 
         document.addEventListener('DOMContentLoaded', () => {
@@ -516,10 +797,47 @@
             populateContainer('leftTextContainer', leftText);
             populateContainer('rightTextContainer', rightText);
 
-            // Update the interval to only work in reading mode
+            // Initialize heatmaps for both containers
+            const leftContainer = document.getElementById('leftTextContainer');
+            const rightContainer = document.getElementById('rightTextContainer');
+            const leftHeatmapCanvas = document.getElementById('leftHeatmapCanvas');
+            const rightHeatmapCanvas = document.getElementById('rightHeatmapCanvas');
+            
+            const leftHeatmap = new Heatmap(leftHeatmapCanvas, leftContainer);
+            const rightHeatmap = new Heatmap(rightHeatmapCanvas, rightContainer);
+
+            const heatmapToggle = document.getElementById('heatmapToggle');
+
+            heatmapToggle.addEventListener('change', () => {
+                leftHeatmapCanvas.classList.toggle('visible', heatmapToggle.checked);
+                rightHeatmapCanvas.classList.toggle('visible', heatmapToggle.checked);
+            });
+
+            // Animation loop for both heatmaps
+            function animate() {
+                if (heatmapToggle.checked) {
+                    leftHeatmap.draw();
+                    rightHeatmap.draw();
+                }
+                requestAnimationFrame(animate);
+            }
+            animate();
+
+            const focusManager = new FocusManager();
+            window.focusManager = focusManager; // Make focusManager globally accessible
+
+            // Update the interval to use focusManager
             setInterval(() => {
                 if (isReadingMode) {
-                    checkOverlap(cursor, paragraphs, true);
+                    checkOverlap(cursor, paragraphs, true, focusManager);
+                    if (heatmapToggle.checked) {
+                        const cursorRect = cursor.getBoundingClientRect();
+                        const cursorX = cursorRect.left + cursorRect.width / 2;
+                        const cursorY = cursorRect.top + cursorRect.height / 2;
+                        
+                        leftHeatmap.addPoint(cursorX, cursorY);
+                        rightHeatmap.addPoint(cursorX, cursorY);
+                    }
                     paragraphs.forEach(paragraph => {
                         if (paragraph.isHighlighted) {
                             paragraph.updateCounter();
@@ -527,6 +845,14 @@
                     });
                 }
             }, 100);
+        });
+
+        // Add event listener for visibility change
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden) {
+                const focusManager = window.focusManager; // You'll need to make focusManager globally accessible
+                focusManager.handleCursorOutOfScreen();
+            }
         });
     </script>
 </body>
