@@ -418,7 +418,8 @@
     }
 
     .knitting-mode .time-counter {
-        display: none !important;
+        background-color: rgba(0, 0, 0, 0.15);
+        color: #333;
     }
 
     .knitting-mode .paragraph-chunk {
@@ -575,22 +576,27 @@
                 return point;
             }
 
-            startRippleEffect() {
+            startRippleEffect(playbackSpeed = 1) {
+                this.resetRipples();
+                
                 if (this.isPaused) {
                     this.isPaused = false;
                 } else {
                     this.activeRipples.add([0]);
                 }
 
+                const baseInterval = 1000;
+                const adjustedInterval = baseInterval * playbackSpeed;
+
                 this.rippleInterval = setInterval(() => {
                     this.activeRipples.forEach(rippleSet => {
-                        rippleSet.push(rippleSet[rippleSet.length - 1] + 2.4);
+                        rippleSet.push(rippleSet[rippleSet.length - 1] + 9);
                         if (rippleSet.length > 10) {
                             rippleSet.shift();
                         }
                     });
                     this.drawRipple();
-                }, 100);
+                }, adjustedInterval);
             }
 
             drawRipple() {
@@ -634,12 +640,10 @@
                 this.rippleContainers.add(rippleContainer);
             }
 
-            stopRippleEffect() {
-                clearInterval(this.rippleInterval);
-                this.isPaused = true;
-            }
-
             resetRipples() {
+                if (this.rippleInterval) {
+                    clearInterval(this.rippleInterval);
+                }
                 this.activeRipples.clear();
                 this.isPaused = false;
                 this.rippleContainers.forEach(container => {
@@ -648,6 +652,11 @@
                     }
                 });
                 this.rippleContainers.clear();
+            }
+
+            stopRippleEffect() {
+                clearInterval(this.rippleInterval);
+                this.isPaused = true;
             }
 
             initializeRandomPoint() {
@@ -703,7 +712,7 @@
                 const counterDiv = this.element.querySelector('.time-counter');
                 counterDiv.textContent = `${seconds}s`;
 
-                if (document.body.classList.contains('playback-mode')) {
+                if (document.body.classList.contains('knitting-mode')) {
                     const scale = 1 + (this.timeSpent / 1000) * 0.5;
                     this.pointElement.style.transform = `scale(${scale})`;
 
@@ -1048,7 +1057,7 @@
                 this.paragraphs = paragraphs;
                 this.currentTime = 0;
                 this.isPlaying = true;
-                this.playbackSpeed = this.recorder.recordingDuration / 10000;
+                this.playbackSpeed = this.recorder.recordingDuration / 10000;  // Maps to 10 seconds
                 this.isFinished = false;
                 this.paragraphTimers = new Map();
                 
@@ -1201,7 +1210,7 @@
                     currentHighlightedParagraph.element.style.isolation = 'isolate';
                     currentHighlightedParagraph.element.style.mixBlendMode = 'normal';
                     if (currentHighlightedParagraph !== this.previousHighlightedParagraph) {
-                        currentHighlightedParagraph.startRippleEffect();
+                        currentHighlightedParagraph.startRippleEffect(this.playbackSpeed);
                     }
                 }
 
@@ -1396,7 +1405,7 @@
                     document.querySelector('.calibration-message').style.display = 'none';
 
                     document.querySelectorAll('.time-counter').forEach(counter => {
-                        counter.style.display = 'block';
+                        counter.style.display = 'block !important';
                     });
 
                     const playbackController = new PlaybackController(recorder, paragraphs);
